@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="EMPTY_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/approvals/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/blockhash-cache/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/lifi/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-adapter/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-data/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-engine/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-engine/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-kit/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-kit/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-legacy/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/listen-tracing/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/privy/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/approvals/target" />
+      <excludeFolder url="file://$MODULE_DIR$/blockhash-cache/target" />
+      <excludeFolder url="file://$MODULE_DIR$/lifi/target" />
+      <excludeFolder url="file://$MODULE_DIR$/listen-adapter/target" />
+      <excludeFolder url="file://$MODULE_DIR$/listen-data/target" />
+      <excludeFolder url="file://$MODULE_DIR$/listen-engine/target" />
+      <excludeFolder url="file://$MODULE_DIR$/listen-kit/target" />
+      <excludeFolder url="file://$MODULE_DIR$/listen-legacy/target" />
+      <excludeFolder url="file://$MODULE_DIR$/listen-tracing/target" />
+      <excludeFolder url="file://$MODULE_DIR$/privy/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

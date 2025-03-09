@@ -8,8 +8,8 @@ sudo cp buyer.service /etc/systemd/system/
 sudo chmod 644 /etc/systemd/system/listener.service
 sudo chmod 644 /etc/systemd/system/buyer.service
 
-sudo systemctl enable listener.service
-sudo systemctl start listener.service
+sudo launchctl enable listener.service
+sudo launchctl start listener.service
 
-sudo systemctl enable buyer.service
-sudo systemctl start buyer.service
+sudo launchctl enable buyer.service
+sudo launchctl start buyer.service

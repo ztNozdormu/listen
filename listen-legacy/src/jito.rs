@@ -182,7 +182,6 @@ mod tests {
     async fn test_send_jito_tx() {
         dotenv::dotenv().ok();
         let rpc_client = RpcClient::new(env("RPC_URL"));
-
         let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
             .expect("Failed to read keypair");
         let instruction = system_instruction::transfer(
@@ -200,5 +199,14 @@ mod tests {
         let tx = Transaction::new(&[&keypair], message, recent_blockhash);
 
         super::send_jito_tx(tx).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_keypair_to_base58_string() {
+        dotenv::dotenv().ok();
+        let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+            .expect("Failed to read keypair");
+        let kp_base58 = keypair.to_base58_string();
+        println!("keypair format base58 : {}", kp_base58);
     }
 }

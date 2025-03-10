@@ -52,7 +52,7 @@ pub async fn make_db() -> Result<Arc<ClickhouseDb>> {
     let mut db = match is_local() {
         true => ClickhouseDb::new(
             "http://localhost:8123",
-            "default",
+            "",
             "default",
             "default",
         ),

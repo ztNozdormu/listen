@@ -14,6 +14,8 @@ pub struct Args {}
 #[tokio::main]
 async fn main() -> Result<()> {
     listen_tracing::setup_tracing();
+    // 默认指定本地环境
+    std::env::set_var("LOCAL", "true");
     if !std::env::var("IS_SYSTEMD_SERVICE").is_ok() {
         dotenv::dotenv().expect("Failed to load .env file");
     }

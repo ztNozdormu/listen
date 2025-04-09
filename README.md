@@ -194,3 +194,7 @@ Profile swap performance using DTrace to produce a flamegraph:
 
 <img width="1210" alt="image" src="https://github.com/piotrostr/listen/assets/63755291/699405b7-adf0-448b-89c1-ba71152dc72b">
 
+## local deploy
+```bash
+docker-compose -f docker-compose-local.yml up -d
+```

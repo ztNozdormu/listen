@@ -44,7 +44,7 @@ mpl-token-metadata = "5.1.0"
 spl-token = "5.0.2"
 clap = { version = "4.5.28", features = ["derive"] }
 tracing = "0.1.41"
-listen-tracing = { path = "../listen-tracing" }
+listen-tracing ={ git = "https://github.com/ztNozdormu/listen-tracing", branch = "main", version = "0.1.0"}
 chrono = "0.4.39"
 futures-util = "0.3.30"
 url = "2.5.4"

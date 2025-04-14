@@ -179,6 +179,8 @@ async fn process_two_token_swap(
             value.as_str().is_some_and(|s| s.contains("pump.fun"))
         });
 
+    // TODO is_init save to sniper_meme
+
     let price_update = PriceUpdate {
         name: token_metadata.mpl.name,
         pubkey: coin_mint,

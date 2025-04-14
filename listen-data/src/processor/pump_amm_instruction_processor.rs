@@ -32,6 +32,28 @@ impl Processor for PumpAmmInstructionProcessor {
         let (meta, instruction, nested_instructions) = data;
 
         match &instruction.data {
+            //          监听池子创建
+            //         if (data.transaction && data.transaction.transaction.meta.logMessages && data.transaction.transaction.meta.logMessages.some(log => log.includes("Program log: Instruction: InitializeMint2"))) {
+            PumpSwapInstruction::CreatePool(_) => {
+                let accounts = Buy::arrange_accounts(&instruction.accounts);
+                if let Some(accounts) = accounts {
+                    let vaults: HashSet<String> = HashSet::from([
+                        accounts.pool_base_token_account.to_string(),
+                        accounts.pool_quote_token_account.to_string(),
+                    ]);
+                    let fee_adas = HashSet::from([accounts
+                        .protocol_fee_recipient_token_account
+                        .to_string()]);
+
+                    self.swap_handler.spawn_swap_processor(
+                        &vaults,
+                        Some(&fee_adas),
+                        &meta,
+                        &nested_instructions,
+                        Dex::PumpSwap,
+                    );
+                }
+            }
             PumpSwapInstruction::Buy(_) => {
                 let accounts = Buy::arrange_accounts(&instruction.accounts);
                 if let Some(accounts) = accounts {

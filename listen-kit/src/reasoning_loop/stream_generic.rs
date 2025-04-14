@@ -1,13 +1,17 @@
 use anyhow::Result;
 use futures::StreamExt;
+use listen_memory::mem0::Mem0;
 use rig::completion::AssistantContent;
 use rig::completion::Message;
 use rig::message::{ToolResultContent, UserContent};
 use rig::streaming::StreamingChoice;
 use rig::OneOrMany;
 use std::io::Write;
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
+use crate::memory::inject_memories;
+use crate::memory::remember_tool_output;
 use crate::reasoning_loop::Model;
 use crate::reasoning_loop::SimpleToolResult;
 
@@ -20,6 +24,7 @@ impl ReasoningLoop {
         prompt: String,
         messages: Vec<Message>,
         tx: Option<Sender<StreamResponse>>,
+        memory: Option<Arc<Mem0>>,
     ) -> Result<Vec<Message>> {
         let mut current_messages = messages.clone();
         let stdout = self.stdout;
@@ -31,12 +36,22 @@ impl ReasoningLoop {
         'outer: loop {
             let mut current_response = String::new();
 
+            let _prompt = if is_first_iteration {
+                let memory = memory.clone();
+                if let Some(memory) = memory {
+                    Message::user(
+                        inject_memories(memory, prompt.clone(), None).await?,
+                    )
+                } else {
+                    Message::user(prompt.clone())
+                }
+            } else {
+                next_input.clone()
+            };
+
             // Stream using the next input (original prompt or tool result)
             let mut stream = match model
-                .stream_completion(
-                    next_input.clone(),
-                    current_messages.clone(),
-                )
+                .stream_completion(_prompt.clone(), current_messages.clone())
                 .await
             {
                 Ok(stream) => stream,
@@ -131,7 +146,10 @@ impl ReasoningLoop {
 
                                 async move {
                                     let result = model
-                                        .call_tool(name.clone(), params)
+                                        .call_tool(
+                                            name.clone(),
+                                            params.clone(),
+                                        )
                                         .await;
                                     let result_str = match &result {
                                         Ok(content) => content.to_string(),
@@ -142,6 +160,7 @@ impl ReasoningLoop {
                                         index: *index,
                                         id,
                                         name,
+                                        params,
                                         result: result_str,
                                     }
                                 }
@@ -151,6 +170,31 @@ impl ReasoningLoop {
                         let mut results =
                             futures::future::join_all(tasks).await;
                         results.sort_by_key(|tool_result| tool_result.index);
+
+                        if let Some(memory) = memory.clone() {
+                            let results = results.clone();
+                            for result in results {
+                                let memory = memory.clone();
+                                tokio::spawn(async move {
+                                    match remember_tool_output(
+                                        memory,
+                                        result.name.clone(),
+                                        result.params.clone(),
+                                        result.result.clone(),
+                                    )
+                                    .await
+                                    {
+                                        Ok(_) => {}
+                                        Err(e) => {
+                                            tracing::error!(
+                                                "Error: failed to remember tool output ({}): {}",
+                                                result.name, e
+                                            );
+                                        }
+                                    }
+                                });
+                            }
+                        }
 
                         // Create a single message with all tool results
                         next_input = Message::User {
@@ -269,6 +313,31 @@ impl ReasoningLoop {
                                 ),
                             ),
                         };
+
+                        if let Some(memory) = memory.clone() {
+                            let name = name.clone();
+                            let params = params.to_string();
+                            let result_str = result_str.clone();
+                            tokio::spawn(async move {
+                                match remember_tool_output(
+                                    memory.clone(),
+                                    name.clone(),
+                                    params,
+                                    result_str,
+                                )
+                                .await
+                                {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Error: failed to remember tool output ({}): {}",
+                                            name,
+                                            e
+                                        );
+                                    }
+                                }
+                            });
+                        }
 
                         if let Some(tx) = &tx {
                             tx.send(StreamResponse::ToolResult {

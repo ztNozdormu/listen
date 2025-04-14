@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 pub struct Features {
     pub autonomous: bool,
     pub deep_research: bool,
+    pub memory: bool,
 }
 
 pub fn equip_with_tools<M: StreamingCompletionModel>(
@@ -171,7 +172,7 @@ pub fn create_solana_agent_openrouter(
     let mut agent =
         equip_with_tools(openrouter_agent_builder(model)).preamble(&preamble);
 
-    if features.deep_research {
+    if features.autonomous {
         agent = equip_with_autonomous_tools(agent);
     }
 

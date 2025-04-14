@@ -24,6 +24,7 @@ async fn main() -> anyhow::Result<()> {
         let features = Features {
             autonomous: false,
             deep_research: false,
+            memory: false,
         };
         let model = match std::env::var("MODEL").unwrap_or_default().as_str()
         {
@@ -99,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
                 "we are testing parallel tool calls, check my solana balance and USDC balance (EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v), do this in one response please"
                 .to_string(),
                 vec![],
+                None,
                 None,
             )
             .await?;

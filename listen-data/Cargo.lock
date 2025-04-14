@@ -2714,6 +2714,7 @@ dependencies = [
 [[package]]
 name = "listen-tracing"
 version = "0.1.0"
+source = "git+https://github.com/ztNozdormu/listen-tracing?branch=main#4e81af88675694a0d6cfaaab42850843b526fa08"
 dependencies = [
  "tracing",
  "tracing-journald",

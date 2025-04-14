@@ -30,7 +30,7 @@ if sudo systemctl is-active --quiet nginx; then
 fi
 
 echo "Copying configuration files..."
-sudo cp ./nginx.conf /etc/nginx/nginx.conf
+sudo cp ./nginx-online.conf /etc/nginx/nginx-online.conf
 
 echo "Validating nginx configuration..."
 if ! sudo nginx -t; then

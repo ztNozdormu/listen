@@ -29,3 +29,4 @@ ai.json
 auth.json
 book
 ansible/inventory
+.idea/

@@ -8,8 +8,8 @@ import {
   UTCTimestamp,
 } from "lightweight-charts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CandlestickData, CandlestickDataSchema } from "../hooks/types";
 import { useListenMetadata } from "../hooks/useListenMetadata";
+import { CandlestickData, CandlestickDataSchema } from "../lib/types";
 import { useTokenStore } from "../store/tokenStore";
 import { Socials } from "./Socials";
 
@@ -447,6 +447,7 @@ export function Chart({ mint, interval: defaultInterval = "30s" }: ChartProps) {
 
       try {
         const response = await fetch(
+          // use prod for charts always
           `https://api.listen-rs.com/v1/adapter/candlesticks?mint=${mint}&interval=${selectedInterval}`
         );
         const responseData = CandlestickDataSchema.parse(await response.json());

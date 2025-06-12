@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
 
     tokio::spawn(async move {
         while let Some(response) = rx.recv().await {
-            print!("{:?}\n", response);
+            println!("{:?}", response);
         }
     });
 
@@ -38,6 +38,7 @@ async fn main() -> Result<()> {
                 vec![],
                 Some(tx),
                 None,
+                "replace-with-any-persistant-user-id".to_string(),
             )
             .await
     })

@@ -13,6 +13,10 @@ export interface WalletTransactionResult {
   solBalance: number;
   usdcBalance: number;
   success: boolean;
+  transactions?: {
+    signature: string;
+    blockTime: number;
+  }[];
 }
 
 /**
@@ -25,7 +29,7 @@ export const countTransactionsForWallet = async (
   try {
     const pubkey = new PublicKey(wallet.address);
 
-    // Get transaction count
+    // Get transaction signatures with block time
     const transactions = await connection.getSignaturesForAddress(pubkey, {
       limit: 1000,
     });
@@ -64,12 +68,19 @@ export const countTransactionsForWallet = async (
       );
     }
 
+    // Extract transaction data with block times
+    const transactionData = transactions.map((tx) => ({
+      signature: tx.signature,
+      blockTime: tx.blockTime || 0,
+    }));
+
     return {
       wallet,
       count: transactions.length,
       solBalance,
       usdcBalance,
       success: true,
+      transactions: transactionData,
     };
   } catch (error) {
     console.error(`Error fetching data for ${wallet.address}:`, error);
@@ -122,7 +133,7 @@ export const processWalletsInChunks = async (
 export const processSolanaWallets = async (
   solanaWallets: Wallet[],
   connection: Connection,
-  concurrencyLimit = 50
+  concurrencyLimit = 30
 ): Promise<WalletTransactionResult[]> => {
   console.log(
     `Starting to process ${solanaWallets.length} Solana wallets with concurrency limit of ${concurrencyLimit}`
@@ -142,6 +153,9 @@ export const processSolanaWallets = async (
 
   // Generate and display report
   generateSolanaReport(results);
+
+  // 200ms timeout
+  await new Promise((resolve) => setTimeout(resolve, 200));
 
   return results;
 };
@@ -183,6 +197,24 @@ export const generateSolanaReport = (
     }
   }
 
+  // Time series analysis
+  const allTransactions = successfulRequests
+    .flatMap((result) => result.transactions || [])
+    .filter((tx) => tx.blockTime > 0)
+    .sort((a, b) => a.blockTime - b.blockTime);
+
+  // Group transactions by day
+  const transactionsByDay = new Map<string, number>();
+  allTransactions.forEach((tx) => {
+    const date = new Date(tx.blockTime * 1000).toISOString().split("T")[0];
+    transactionsByDay.set(date, (transactionsByDay.get(date) || 0) + 1);
+  });
+
+  // Calculate daily statistics
+  const dailyStats = Array.from(transactionsByDay.entries())
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+    .map(([date, count]) => ({ date, count }));
+
   console.log(`
 Processing complete:
 - Successfully processed: ${successfulRequests.length}/${results.length} wallets
@@ -200,5 +232,26 @@ Processing complete:
 - Highest USDC balance: ${highestUsdcWallet.usdcBalance.toFixed(2)} USDC (${
     highestUsdcWallet.wallet.address
   })
+
+Time Series Analysis:
+- First transaction: ${
+    allTransactions.length > 0
+      ? new Date(allTransactions[0].blockTime * 1000).toISOString()
+      : "N/A"
+  }
+- Last transaction: ${
+    allTransactions.length > 0
+      ? new Date(
+          allTransactions[allTransactions.length - 1].blockTime * 1000
+        ).toISOString()
+      : "N/A"
+  }
+- Daily transaction counts:
+${dailyStats
+  .map((stat) => `  ${stat.date}: ${stat.count} transactions`)
+  .join("\n")}
 `);
+
+  // Write time series data to a separate file
+  write("output/solana_time_series.json", JSON.stringify(dailyStats, null, 2));
 };

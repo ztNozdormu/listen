@@ -9,23 +9,19 @@ async fn main() -> anyhow::Result<()> {
     };
 
     use listen_kit::{
-        agent::model_to_versioned_model,
+        agent::{model_to_versioned_model, Features},
         reasoning_loop::Model,
         solana::agent::{
             create_solana_agent_claude, create_solana_agent_deepseek,
-            create_solana_agent_gemini, create_solana_agent_openrouter,
-            Features,
+            create_solana_agent_gemini, create_solana_agent_openai,
+            create_solana_agent_openrouter,
         },
     };
 
     let signer = LocalSolanaSigner::new(env("SOLANA_PRIVATE_KEY"));
 
     SignerContext::with_signer(Arc::new(signer), async {
-        let features = Features {
-            autonomous: false,
-            deep_research: false,
-            memory: false,
-        };
+        let features = Features::default();
         let model = match std::env::var("MODEL").unwrap_or_default().as_str()
         {
             "gemini" => Model::Gemini(Arc::new(create_solana_agent_gemini(
@@ -73,6 +69,13 @@ async fn main() -> anyhow::Result<()> {
                     Some(model_to_versioned_model("deepseek".to_string())),
                 )))
             }
+            "openai" => {
+                Model::OpenAI(Arc::new(create_solana_agent_openai(
+                    None,
+                    features,
+                    "en".to_string(),
+                )))
+            }
             "deepseek" => {
                 Model::DeepSeek(Arc::new(create_solana_agent_deepseek(
                     None,
@@ -97,11 +100,12 @@ async fn main() -> anyhow::Result<()> {
         let messages = trader_agent
             .stream(
                 // "we are testing the resoning loop, fetch my solana balance, then fetch my the current time, repeat three times, batches of double tool calls please"
-                "we are testing parallel tool calls, check my solana balance and USDC balance (EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v), do this in one response please"
+                "we are testing parallel tool calls, fetch the top solana tokens, check my solana balance and USDC balance (EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v), do this in one response please"
                 .to_string(),
                 vec![],
                 None,
                 None,
+                "replace-with-any-persistant-user-id".to_string(),
             )
             .await?;
 

@@ -3,7 +3,7 @@ use rig::{agent::AgentBuilder, streaming::StreamingCompletionModel};
 use crate::{
     agents::{
         chart::DelegateToChartAgent, research::DelegateToResearchAgent,
-        solana_trader::DelegateToSolanaTraderAgent,
+        trader::DelegateToTraderAgent,
     },
     common::{
         claude_agent_builder, deepseek_agent_builder, gemini_agent_builder,
@@ -66,7 +66,7 @@ pub fn equip_with_swarm_leader_tools<M: StreamingCompletionModel>(
         .tool(FetchTokenMetadata)
         .tool(SearchOnDexScreener)
         .tool(DelegateToResearchAgent)
-        .tool(DelegateToSolanaTraderAgent)
+        .tool(DelegateToTraderAgent)
         .tool(DelegateToChartAgent)
         .tool(Think)
         .tool(GetCurrentTime)

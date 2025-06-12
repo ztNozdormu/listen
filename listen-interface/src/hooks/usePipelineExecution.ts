@@ -5,33 +5,32 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { config } from "../config";
 import { useToast } from "../contexts/ToastContext";
+import { chainIdToCaip2 } from "../lib/util";
 import {
   Pipeline,
   PipelineActionType,
   PipelineConditionType,
 } from "../types/pipeline";
-import { usePrivyWallets } from "./usePrivyWallet";
 
 interface ExecuteOptions {
   onSuccess?: () => void;
   onError?: (error: Error) => void;
+  chainId?: string;
 }
 
 export function usePipelineExecution() {
   const [isExecuting, setIsExecuting] = useState(false);
   const { getAccessToken } = usePrivy();
   const { showToast } = useToast();
-  const { data: wallets } = usePrivyWallets();
   const queryClient = useQueryClient();
 
   const { t } = useTranslation();
 
-  const invalidateSolanaPortfolio = () => {
-    if (wallets?.solanaWallet) {
-      queryClient.refetchQueries({
-        queryKey: ["portfolio", wallets.solanaWallet.toString()],
-      });
-    }
+  const triggerPipelinesRefetch = () => {
+    console.debug(
+      "usePipelineExecution: Triggering immediate pipelines refetch."
+    );
+    queryClient.invalidateQueries({ queryKey: ["pipelines"] });
   };
 
   // Execute any pipeline
@@ -51,18 +50,25 @@ export function usePipelineExecution() {
         },
       });
 
-      invalidateSolanaPortfolio();
-
       if (!res.ok) {
-        throw new Error("Failed to execute pipeline");
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Pipeline execution failed:", res.status, errorData);
+        throw new Error(
+          errorData?.detail || `Failed to execute pipeline: ${res.statusText}`
+        );
       }
 
-      showToast(t("pipeline_execution.pipeline_scheduled"), "success");
+      console.debug("Pipeline submitted successfully.");
+      triggerPipelinesRefetch();
+
       options?.onSuccess?.();
       return true;
     } catch (error) {
+      console.error("Error executing pipeline:", error);
       const errorMessage =
-        error instanceof Error ? error.message : t("pipeline_execution.error");
+        error instanceof Error
+          ? error.message
+          : t("pipeline_execution.execution_error");
       showToast(errorMessage, "error");
       options?.onError?.(
         error instanceof Error ? error : new Error(errorMessage)
@@ -90,7 +96,7 @@ export function usePipelineExecution() {
             output_token: tokenAddress,
             amount: lamports,
             from_chain_caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-            to_chain_caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+            to_chain_caip2: chainIdToCaip2(options?.chainId),
           },
           conditions: [
             {
@@ -123,7 +129,13 @@ export function usePipelineExecution() {
     tokenName: string,
     options?: ExecuteOptions
   ) => {
-    const rawAmount = Math.floor(tokenAmount * 10 ** tokenDecimals).toString();
+    let adjustedDecimals = tokenDecimals;
+    if (tokenName === "USDC") {
+      adjustedDecimals = 6;
+    }
+    const rawAmount = Math.floor(
+      tokenAmount * 10 ** adjustedDecimals
+    ).toString();
 
     const sellPipeline: Pipeline = {
       steps: [
@@ -133,7 +145,7 @@ export function usePipelineExecution() {
             input_token: tokenAddress,
             output_token: "So11111111111111111111111111111111111111112", // wSOL
             amount: rawAmount,
-            from_chain_caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+            from_chain_caip2: chainIdToCaip2(options?.chainId),
             to_chain_caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
           },
           conditions: [

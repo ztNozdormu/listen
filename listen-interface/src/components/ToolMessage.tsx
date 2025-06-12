@@ -1,3 +1,4 @@
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { BsClock } from "react-icons/bs";
@@ -7,11 +8,15 @@ import {
   FaExclamationTriangle,
   FaSearch,
 } from "react-icons/fa";
-import { FaRobot, FaXTwitter } from "react-icons/fa6";
+import { FaImage, FaRobot, FaXTwitter } from "react-icons/fa6";
 import { IoSwapHorizontal } from "react-icons/io5";
 import { z } from "zod";
-import { CandlestickDataSchema } from "../hooks/types";
-import { renderTimestamps } from "../hooks/util";
+import {
+  CandlestickDataSchema,
+  PriceActionAnalysisResponseSchema,
+  TokenSchema,
+} from "../lib/types";
+import { renderTimestamps } from "../lib/util";
 import { DexScreenerResponseSchema } from "../types/dexscreener";
 import {
   Message,
@@ -20,13 +25,17 @@ import {
   ToolCallSchema,
   ToolResult,
 } from "../types/message";
-import { TokenMetadataSchema } from "../types/metadata";
+import {
+  GtTokenMetadataSchema,
+  TokenMetadataRawSchema,
+} from "../types/metadata";
+import { L2OrderbookSnapshotSchema } from "../types/orderbook";
 import {
   JupiterQuoteResponseSchema,
   QuoteResponseSchema,
 } from "../types/quote";
 import { TweetSchema } from "../types/x";
-import { SolanaBalance, SplTokenBalance } from "./Balances";
+import { EthereumBalance, SolanaBalance, SplTokenBalance } from "./Balances";
 import {
   BubbleMapDisplay,
   TokenHolderAnalysisSchema,
@@ -35,17 +44,23 @@ import { Chart, InnerChart } from "./Chart";
 import { ChatMessage } from "./ChatMessage";
 import { DexscreenerDisplay } from "./DexscreenerDisplay";
 import DropdownMessage from "./DropdownMessage";
+import { Erc20Balance, Erc20BalanceSchema } from "./Erc20Balance";
+import { EvmRawTokenMetadataDisplay } from "./EvmRawTokenMetadataDisplay";
 import { FetchXPostDisplay } from "./FetchXPostDisplay";
+import { GeckoTerminalChart } from "./GeckoTerminalChart";
 import { JupiterQuoteDisplay } from "./JupiterQuoteDisplay";
+import { OrderbookDisplay } from "./OrderbookDisplay";
 import { TransactionLink } from "./PipelineStepContainer";
 import { QuoteDisplay } from "./QuoteDisplay";
 import { RawTokenMetadataDisplay } from "./RawTokenMetadataDisplay";
 import { embedResearchAnchors } from "./ResearchOutput";
 import { RiskAnalysisDisplay, RiskAnalysisSchema } from "./RiskDisplay";
+import { TokenDisplay } from "./TokenDisplay";
 import { TopTokensDisplay, TopTokensResponseSchema } from "./TopTokensDisplay";
 import { TopicDisplay, TopicSchema } from "./TopicDisplay";
 
 const SplTokenBalanceSchema = z.tuple([z.string(), z.number(), z.string()]);
+const EthBalanceSchema = z.tuple([z.string(), z.number()]);
 
 const formatError = (error: string) => {
   if (error.includes("Invalid param: could not find account")) {
@@ -193,6 +208,106 @@ export const ToolMessage = ({
     return null;
   }
 
+  if (toolOutput.name === "get_l2_snapshot") {
+    const parsed = L2OrderbookSnapshotSchema.safeParse(
+      JSON.parse(toolOutput.result)
+    );
+    if (parsed.success) {
+      return <OrderbookDisplay orderbookSnapshot={parsed.data} />;
+    }
+    console.error("Failed to parse l2 snapshot:", parsed.error);
+    return null;
+  }
+
+  if (toolOutput.name === "get_token") {
+    try {
+      const parsed = TokenSchema.safeParse(JSON.parse(toolOutput.result));
+      if (parsed.success) {
+        return <TokenDisplay token={parsed.data} />;
+      }
+    } catch (e) {
+      console.error("Failed to parse token:", e);
+    }
+    return (
+      <div className="text-gray-400">
+        <ChatMessage message={toolOutput.result} direction="agent" />
+      </div>
+    );
+  }
+
+  if (toolOutput.name === "fetch_price_action_analysis_evm") {
+    const params = useMemo(() => {
+      if (!toolCallInfo) return null;
+      try {
+        // Use pre-parsed arguments if available (from RigToolCall)
+        if ("_arguments" in toolCallInfo && toolCallInfo._arguments) {
+          return toolCallInfo._arguments as Record<string, any>;
+        }
+        // Otherwise parse the params string (from ToolCall or adapted RigToolCall)
+        // Check if params exists and is a string before parsing
+        if (
+          "params" in toolCallInfo &&
+          typeof toolCallInfo.params === "string"
+        ) {
+          return JSON.parse(toolCallInfo.params);
+        } else if ("params" in toolCallInfo) {
+          // Log a warning if params exists but is not a string
+          console.warn(
+            "Tool call 'params' exists but is not a string:",
+            toolCallInfo.params
+          );
+          return null; // Return null as we can't parse it
+        }
+        // Redundant else-if removed
+        return null; // Return null if neither _arguments nor valid params string is found
+      } catch (e) {
+        console.error("Failed to parse tool call params:", e);
+        return null;
+      }
+    }, [toolCallInfo]);
+
+    console.debug(params);
+    const pairAddress = params?.pair_address;
+    const interval = params?.interval || "30s";
+    const chainId = params?.chain_id;
+
+    if (pairAddress) {
+      let parsed = toolOutput.result;
+      try {
+        parsed = JSON.parse(toolOutput.result);
+      } catch (e) {
+        console.error("Failed to parse price action analysis:", e);
+      }
+      const withAggregates =
+        PriceActionAnalysisResponseSchema.safeParse(parsed);
+      const analysis = withAggregates.success
+        ? withAggregates.data.analysis
+        : parsed;
+      return (
+        <div className="mb-1">
+          <div className="h-[350px] mb-3">
+            <GeckoTerminalChart
+              pairAddress={pairAddress}
+              chainId={chainId}
+              timeframe={interval}
+            />
+          </div>
+          <DropdownMessage
+            title={t("tool_messages.price_action_analysis")}
+            message={renderTimestamps(analysis)}
+            icon={<FaChartLine />}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-gray-400">
+        <ChatMessage message={toolOutput.result} direction="agent" />
+      </div>
+    );
+  }
+
   if (toolOutput.name === "fetch_price_action_analysis") {
     try {
       // Extract parameters using toolCallInfo
@@ -236,6 +351,11 @@ export const ToolMessage = ({
         } catch (e) {
           console.error("Failed to parse price action analysis:", e);
         }
+        const withAggregates =
+          PriceActionAnalysisResponseSchema.safeParse(parsed);
+        const analysis = withAggregates.success
+          ? withAggregates.data.analysis
+          : parsed;
         return (
           <div className="mb-1">
             <div className="h-[300px] mb-3">
@@ -243,7 +363,7 @@ export const ToolMessage = ({
             </div>
             <DropdownMessage
               title={t("tool_messages.price_action_analysis")}
-              message={renderTimestamps(parsed)}
+              message={renderTimestamps(analysis)}
               icon={<FaChartLine />}
             />
           </div>
@@ -262,6 +382,32 @@ export const ToolMessage = ({
           <ChatMessage message={toolOutput.result} direction="agent" />
         </div>
       );
+    }
+  }
+
+  if (toolOutput.name === "get_eth_balance") {
+    try {
+      const parsed = EthBalanceSchema.parse(JSON.parse(toolOutput.result));
+      return (
+        <div className="p-3">
+          <EthereumBalance ethereumBalance={parsed[0]} chainId={parsed[1]} />
+        </div>
+      );
+    } catch (e) {
+      console.error("Failed to parse eth balance:", e);
+    }
+  }
+
+  if (toolOutput.name === "get_erc20_balance") {
+    try {
+      const parsed = Erc20BalanceSchema.parse(JSON.parse(toolOutput.result));
+      return (
+        <div className="p-3">
+          <Erc20Balance erc20Balance={parsed} />
+        </div>
+      );
+    } catch (e) {
+      console.error("Failed to parse erc20 balance:", e);
     }
   }
 
@@ -330,12 +476,24 @@ export const ToolMessage = ({
     }
   }
 
+  if (toolOutput.name == "view_image") {
+    const message = JSON.parse(toolOutput.result);
+    return (
+      <div className="p-3">
+        <DropdownMessage
+          title={t("tool_messages.view_image")}
+          message={message}
+          icon={<FaImage />}
+        />
+      </div>
+    );
+  }
+
   if (toolOutput.name === "fetch_x_post") {
     try {
       const parsed = TweetSchema.parse(JSON.parse(toolOutput.result));
       return <FetchXPostDisplay tweet={parsed} />;
     } catch (e) {
-      console.error("Failed to parse tweet:", e);
       if (toolOutput.result.includes("No tweet found")) {
         return (
           <div className="p-3">
@@ -386,11 +544,28 @@ export const ToolMessage = ({
     }
   }
 
-  if (toolOutput.result.includes("ToolCallError")) {
-    return (
-      <div className="text-red-400 flex items-center gap-1 p-3 text-sm">
-        <FaExclamationTriangle /> {t("tool_messages.tool_call_error")}
-      </div>
+  if (
+    toolOutput.result.includes("ToolCallError") &&
+    !toolOutput.name.includes("delegate")
+  ) {
+    return null;
+    // @ts-ignore unused but might be used at some point again
+    const _errorWithTooltip = (
+      <Tooltip.Provider>
+        <Tooltip.Root delayDuration={100}>
+          <Tooltip.Trigger asChild>
+            <div className="text-red-400 flex items-center gap-1 p-3 text-sm cursor-help">
+              <FaExclamationTriangle /> {t("tool_messages.tool_call_error")}
+            </div>
+          </Tooltip.Trigger>
+          <Tooltip.Portal>
+            <Tooltip.Content className="rounded-md bg-[#2d2d2d] px-4 py-2 text-sm text-white max-w-md break-words shadow-lg z-50">
+              {toolOutput.result}
+              <Tooltip.Arrow className="fill-[#2d2d2d]" />
+            </Tooltip.Content>
+          </Tooltip.Portal>
+        </Tooltip.Root>
+      </Tooltip.Provider>
     );
   }
 
@@ -499,6 +674,17 @@ export const ToolMessage = ({
     }
   }
 
+  if (toolOutput.name === "fetch_top_tokens_by_category") {
+    try {
+      const parsed = TopTokensResponseSchema.parse(
+        JSON.parse(toolOutput.result)
+      );
+      return <TopTokensDisplay tokens={parsed} />;
+    } catch (e) {
+      console.error("Failed to parse top tokens response:", e);
+    }
+  }
+
   if (
     toolOutput.name === "delegate_to_research_agent" ||
     toolOutput.name === "delegate_to_chart_agent" ||
@@ -525,10 +711,21 @@ export const ToolMessage = ({
 
   if (toolOutput.name === "fetch_token_metadata") {
     try {
-      const parsed = TokenMetadataSchema.parse(JSON.parse(toolOutput.result));
+      const parsed = TokenMetadataRawSchema.parse(
+        JSON.parse(toolOutput.result)
+      );
       return <RawTokenMetadataDisplay metadata={parsed} />;
     } catch (e) {
       console.error("Failed to parse token metadata:", e);
+    }
+  }
+
+  if (toolOutput.name === "fetch_token_metadata_evm") {
+    try {
+      const parsed = GtTokenMetadataSchema.parse(JSON.parse(toolOutput.result));
+      return <EvmRawTokenMetadataDisplay metadata={parsed} />;
+    } catch (e) {
+      console.error("Failed to parse EVM token metadata:", e);
     }
   }
 
@@ -572,7 +769,10 @@ export const ToolMessage = ({
     }
   }
 
-  if (toolOutput.name === "fetch_top_tokens") {
+  if (
+    toolOutput.name === "fetch_top_tokens" ||
+    toolOutput.name === "fetch_top_tokens_by_chain_id"
+  ) {
     try {
       const parsed = TopTokensResponseSchema.parse(
         JSON.parse(toolOutput.result)
@@ -589,7 +789,6 @@ export const ToolMessage = ({
       </div>
     );
     try {
-      // TODO standardize this output, not just string but { status: string, transactionHash: string }
       return (
         <TxContainer>
           <div className="mb-2 overflow-hidden">
@@ -639,21 +838,19 @@ export const ToolMessage = ({
           typeof resultData === "string" ? JSON.parse(resultData) : resultData;
 
         // First try Jupiter quote schema
-        try {
-          const jupiterQuote = JupiterQuoteResponseSchema.parse(parsedData);
-          return <JupiterQuoteDisplay quote={jupiterQuote} />;
-        } catch (jupiterError) {
-          console.error("Jupiter quote validation failed:", jupiterError);
-
-          // Then try regular quote schema
-          try {
-            const quote = QuoteResponseSchema.parse(parsedData);
-            return <QuoteDisplay quote={quote} />;
-          } catch (quoteError) {
-            console.error("Regular quote validation failed:", quoteError);
-            throw new Error("Failed to validate quote with either schema");
-          }
+        const jupiterQuote = JupiterQuoteResponseSchema.safeParse(parsedData);
+        if (jupiterQuote.success) {
+          return <JupiterQuoteDisplay quote={jupiterQuote.data} />;
         }
+
+        // Then try regular quote schema
+        const quote = QuoteResponseSchema.safeParse(parsedData);
+        if (quote.success) {
+          return <QuoteDisplay quote={quote.data} />;
+        }
+
+        // If neither schema matches, throw an error
+        throw new Error("Failed to validate quote with either schema");
       } catch (parseError) {
         console.error("JSON parse error:", parseError);
         throw parseError;
@@ -661,7 +858,8 @@ export const ToolMessage = ({
     } catch (e) {
       console.error("Quote processing failed:", e);
 
-      return (
+      // @ts-ignore unused but might be used at some point again
+      const _errorWithTooltip = (
         <div className="bg-blue-900/20 text-blue-300 rounded-lg px-4 py-3 my-2 backdrop-blur-sm border border-opacity-20 border-blue-500">
           <p className="text-red-400 break-words">
             Failed to parse quote data:{" "}
@@ -679,8 +877,9 @@ export const ToolMessage = ({
           </details>
         </div>
       );
+      return null;
     }
   }
 
-  return <ChatMessage message={toolOutput.result} direction="incoming" />;
+  return null;
 };

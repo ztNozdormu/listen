@@ -10,13 +10,15 @@ import {
   useState,
 } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { chatCache } from "../hooks/localStorage";
+import { config } from "../config";
 import { useDebounce } from "../hooks/useDebounce";
 import { usePrivyWallets } from "../hooks/usePrivyWallet";
-import { compactPortfolio } from "../hooks/util";
+import { useSolanaPrice } from "../hooks/useSolanaPrice";
 import i18n from "../i18n";
+import { chatCache } from "../lib/localStorage";
+import { compactPortfolio } from "../lib/util";
 import { renderAgentOutput } from "../parse-agent-output";
-import { pickSystemPrompt } from "../prompts";
+import { systemPrompt } from "../prompts";
 import { usePortfolioStore } from "../store/portfolioStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useSuggestStore } from "../store/suggestStore";
@@ -56,6 +58,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     modelType,
     researchEnabled,
     memoryEnabled,
+    hyperliquid,
   } = useSettingsStore();
   const { getAccessToken, user } = usePrivy();
   const {
@@ -66,6 +69,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
   const { data: wallets, isLoading: isLoadingWallets } = usePrivyWallets();
   const { getSolanaAssets, getEvmAssets } = usePortfolioStore();
+  const { data: solanaPrice } = useSolanaPrice();
 
   const solanaAssets = getSolanaAssets();
   const evmAssets = getEvmAssets();
@@ -137,6 +141,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       userMessage: string,
       options?: { skipAddingUserMessage?: boolean; existingMessageId?: string }
     ) => {
+      // Clear nested agent output when starting a new message
+      setNestedAgentOutput(null);
+
       // Clear suggestions when starting a new message
       useSuggestStore.getState().clearSuggestions(chatId);
 
@@ -244,14 +251,13 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             }
             return msg;
           });
-        const preamble = pickSystemPrompt(
-          chatType,
-          agentMode,
+        const preamble = systemPrompt(
           portfolio,
-          defaultAmount.toString(),
           wallets?.solanaWallet?.toString() || null,
           wallets?.evmWallet?.toString() || null,
-          user?.isGuest || false
+          defaultAmount.toString(),
+          user?.isGuest || false,
+          solanaPrice
         );
 
         if (researchEnabled && modelType === "claude") {
@@ -268,25 +274,21 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             autonomous: agentMode,
             deep_research: researchEnabled,
             memory: memoryEnabled,
+            hyperliquid,
           },
-          model_type: modelType,
+          model_type: "gemini", // hard-code
           locale: i18n.language,
         });
 
-        const response = await fetch(
-          process.env.NODE_ENV === "production"
-            ? "https://api.listen-rs.com/v1/kit/stream"
-            : "http://localhost:6969/stream",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bearer " + (await getAccessToken()),
-            },
-            body,
-            signal,
-          }
-        );
+        const response = await fetch(`${config.kitEndpoint}/stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + (await getAccessToken()),
+          },
+          body,
+          signal,
+        });
 
         if (!response.ok) {
           throw new Error("Failed to initialize stream");
@@ -569,19 +571,16 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const response = await fetch(
-        "https://api.listen-rs.com/v1/adapter/save-chat",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            chat_id: chatId,
-            chat: _chat, // The entire chat object
-          }),
-        }
-      );
+      const response = await fetch(`${config.adapterEndpoint}/save-chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          chat: _chat, // The entire chat object
+        }),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to share chat");
@@ -604,6 +603,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const loadSharedChat = async (chatId: string) => {
     try {
       const response = await fetch(
+        // leave this as always prod for debugging prod chats locally
         `https://api.listen-rs.com/v1/adapter/get-chat?chat_id=${chatId}`,
         {
           method: "GET",

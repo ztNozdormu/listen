@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { IoCloseOutline, IoRefreshOutline } from "react-icons/io5";
 import { useMobile } from "../contexts/MobileContext";
+import { usePanel } from "../contexts/PanelContext";
 import { usePortfolioStore } from "../store/portfolioStore";
 import { Chat } from "./Chat";
 import { FloatingPanel } from "./FloatingPanel";
@@ -11,16 +12,11 @@ import { PriceUpdates } from "./PriceUpdates";
 import { PriceUpdatesHeader } from "./PriceUpdatesHeader";
 import { Settings } from "./Settings";
 
-export function PanelSelector({
-  activePanel,
-  setActivePanel,
-}: {
-  activePanel: string | null;
-  setActivePanel: (panel: string | null) => void;
-}) {
+export function PanelSelector() {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const { isMobile } = useMobile();
   const { t } = useTranslation();
+  const { activePanel, setActivePanel } = usePanel();
 
   const { refreshPortfolio } = usePortfolioStore();
 
@@ -143,9 +139,11 @@ export function PanelSelector({
 
       {activePanel === "portfolio" && (
         <FloatingPanel
-          title="portfolio"
+          title="blank"
           onClose={handleClose}
-          headerContent={<PortfolioHeader onRefresh={refreshPortfolio} />}
+          headerContent={<></>}
+          disableHeader={true}
+          // headerContent={<PortfolioHeader onRefresh={refreshPortfolio} />}
         >
           <Portfolio />
         </FloatingPanel>
@@ -163,16 +161,10 @@ export function PanelSelector({
 // New Portfolio Header component
 function PortfolioHeader({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const { t } = useTranslation();
-  const { getPortfolioValue, isLoading } = usePortfolioStore();
-  const portfolioValue = getPortfolioValue();
 
   return (
     <div className="flex items-center justify-between w-full">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-sm">
-          {isLoading ? "..." : `$${portfolioValue.toFixed(2)}`}
-        </span>
-      </div>
+      <div className="flex items-center gap-2"></div>
       <div className="flex items-center gap-2">
         <button
           onClick={onRefresh}

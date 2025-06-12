@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { compactPortfolio } from "../hooks/util";
+import { config } from "../config";
+import { compactPortfolio } from "../lib/util";
 import { Message } from "../types/message";
 import { usePortfolioStore } from "./portfolioStore";
 import { useSettingsStore } from "./settingsStore";
@@ -16,6 +17,7 @@ interface SuggestState {
   suggestionsPerChat: SuggestionsPerChat;
   isLoading: boolean;
   error: string | null;
+  lastMessageHadSpecialTags: boolean;
   fetchSuggestions: (
     chatId: string,
     messages: Message[],
@@ -24,15 +26,21 @@ interface SuggestState {
   ) => Promise<void>;
   clearSuggestions: (chatId?: string) => void;
   getSuggestions: (chatId: string) => string[];
+  setLastMessageHadSpecialTags: (value: boolean) => void;
 }
 
 export const useSuggestStore = create<SuggestState>((set, get) => ({
   suggestionsPerChat: {},
   isLoading: false,
   error: null,
+  lastMessageHadSpecialTags: false,
 
   getSuggestions: (chatId: string) => {
     return get().suggestionsPerChat[chatId]?.suggestions || [];
+  },
+
+  setLastMessageHadSpecialTags: (value: boolean) => {
+    set({ lastMessageHadSpecialTags: value });
   },
 
   fetchSuggestions: async (chatId, messages, getAccessToken, locale = "en") => {
@@ -73,23 +81,18 @@ export const useSuggestStore = create<SuggestState>((set, get) => ({
 
     try {
       const token = await getAccessToken();
-      const response = await fetch(
-        process.env.NODE_ENV === "production"
-          ? "https://api.listen-rs.com/v1/kit/suggest"
-          : "http://localhost:6969/suggest",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            chat_history: chatHistory,
-            locale,
-            context: JSON.stringify(portfolio),
-          }),
-        }
-      );
+      const response = await fetch(`${config.kitEndpoint}/suggest`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          chat_history: chatHistory,
+          locale,
+          context: JSON.stringify(portfolio),
+        }),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to fetch suggestions");

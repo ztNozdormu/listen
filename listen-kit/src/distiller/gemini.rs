@@ -9,6 +9,7 @@ use super::analyst::{
 use super::preambles;
 use crate::agents::delegate::delegate_to_agent;
 use crate::common::gemini_agent_builder;
+use crate::distiller::analyst::preprocess_candlesticks;
 use crate::reasoning_loop::Model;
 use crate::signer::SignerContext;
 
@@ -47,12 +48,16 @@ impl TwitterAnalystAgent for GeminiAnalystAgent {
             format!("query: {}\nresponse: {}", query, response)
         };
 
+        let ctx = SignerContext::current().await;
+        let user_id = ctx.user_id().unwrap_or_default();
+
         delegate_to_agent(
             prompt_text,
             self.agent.clone(),
             "twitter_analyst".to_string(),
-            SignerContext::current().await,
+            ctx,
             false, // with stdout
+            user_id,
         )
         .await
         .map_err(|e| AnalystError::DelegateError(e.to_string()))
@@ -68,8 +73,9 @@ impl ChartAnalystAgent for GeminiAnalystAgent {
         interval: &str,
         intent: Option<String>,
     ) -> Result<String, AnalystError> {
-        let candlesticks_json = serde_json::to_string(candlesticks)
-            .map_err(|_| AnalystError::SerializationError)?;
+        let candlesticks_json =
+            serde_json::to_string(&preprocess_candlesticks(candlesticks)?)
+                .map_err(|_| AnalystError::SerializationError)?;
 
         let prompt_text = if self.locale == "zh" {
             let base = format!(
@@ -93,12 +99,16 @@ impl ChartAnalystAgent for GeminiAnalystAgent {
             }
         };
 
+        let ctx = SignerContext::current().await;
+        let user_id = ctx.user_id().unwrap_or_default();
+
         delegate_to_agent(
             prompt_text,
             self.agent.clone(),
             "chart_analyst".to_string(),
-            SignerContext::current().await,
+            ctx,
             false, // with stdout
+            user_id,
         )
         .await
         .map_err(|e| AnalystError::DelegateError(e.to_string()))
@@ -133,12 +143,16 @@ impl WebAnalystAgent for GeminiAnalystAgent {
             }
         };
 
+        let ctx = SignerContext::current().await;
+        let user_id = ctx.user_id().unwrap_or_default();
+
         delegate_to_agent(
             prompt_text,
             self.agent.clone(),
             "web_analyst".to_string(),
-            SignerContext::current().await,
+            ctx,
             false, // with stdout
+            user_id,
         )
         .await
         .map_err(|e| AnalystError::DelegateError(e.to_string()))

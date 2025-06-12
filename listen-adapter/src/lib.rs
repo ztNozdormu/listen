@@ -4,6 +4,8 @@ pub mod redis_client;
 pub mod redis_subscriber;
 pub mod routes;
 pub mod state;
+pub mod version;
+pub mod webhook;
 pub mod websocket;
 
 #[cfg(test)]

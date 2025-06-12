@@ -1,3 +1,4 @@
+use crate::version::VERSION;
 use crate::websocket::handle_ws_connection;
 use crate::{db::candlesticks::CandlestickInterval, state::AppState};
 use actix_web::{error::InternalError, http::StatusCode, web, Error, HttpRequest, HttpResponse};
@@ -33,7 +34,7 @@ pub async fn health_check() -> HttpResponse {
 
 pub async fn version() -> HttpResponse {
     HttpResponse::Ok().json(json!({
-        "version": "2.7.2"
+        "version": VERSION
     }))
 }
 
@@ -129,6 +130,20 @@ pub async fn get_price(
         Ok(price) => Ok(HttpResponse::Ok().json(price)),
         Err(e) => {
             error!("Error getting price: {}", e);
+            Err(InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR).into())
+        }
+    }
+}
+
+pub async fn get_24h_open_price(
+    state: web::Data<AppState>,
+    query: web::Query<PriceQuery>,
+) -> Result<HttpResponse, Error> {
+    let open_price = state.clickhouse_db.get_24h_open_price(&query.mint).await;
+    match open_price {
+        Ok(price) => Ok(HttpResponse::Ok().json(price)),
+        Err(e) => {
+            error!("Error getting 24h open price: {}", e);
             Err(InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR).into())
         }
     }

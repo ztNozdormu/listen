@@ -12,7 +12,7 @@ pub mod risk;
 pub mod types;
 
 #[tool(description = "
-Analyze the distribution and concentration of wallets for a Solana token
+Analyze the distribution and concentration of wallets for any Solana token
 
 Parameters:
 - token_address (string): The address of the token to analyze.
@@ -91,7 +91,7 @@ mod tests {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let gini = calculate_gini_index(&values);
         assert!(
-            gini >= 0.0 && gini <= 1.0,
+            (0.0..=1.0).contains(&gini),
             "Gini index should be between 0 and 1"
         );
     }

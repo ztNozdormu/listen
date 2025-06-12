@@ -3,13 +3,16 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { FiPlus, FiSend, FiShare2, FiStopCircle } from "react-icons/fi";
+import { FiPlus, FiSend, FiStopCircle } from "react-icons/fi";
 import { IoSwapHorizontal } from "react-icons/io5";
 import { LuTelescope } from "react-icons/lu";
 import { MdMemory } from "react-icons/md";
+import { TbShare2 } from "react-icons/tb";
+import { useKeyboard } from "../contexts/KeyboardContext";
 import { useMobile } from "../contexts/MobileContext";
 import { usePrivyWallets } from "../hooks/usePrivyWallet";
 import { useSettingsStore } from "../store/settingsStore";
+import { useWalletStore } from "../store/walletStore";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -44,9 +47,15 @@ export function ChatInput({
     setMemoryEnabled,
   } = useSettingsStore();
 
+  const { activeWallet } = useWalletStore();
+
   const { isMobile } = useMobile();
 
   const { user } = usePrivy();
+
+  const { setIsKeyboardOpen } = useKeyboard();
+
+  // const { data: listenBalance } = useListenBalance();
 
   // Function to auto-resize the textarea
   const autoResizeTextarea = () => {
@@ -95,8 +104,10 @@ export function ChatInput({
 
   // Toggle the trading mode
   const toggleTrading = () => {
-    setResearchEnabled(false);
-    setAgentMode(!agentMode);
+    if (activeWallet === "listen") {
+      setResearchEnabled(false);
+      setAgentMode(!agentMode);
+    }
   };
 
   const toggleMemory = () => {
@@ -106,13 +117,23 @@ export function ChatInput({
   const sendDisabled = modelType === "claude" && researchEnabled;
 
   return (
-    <div className="flex flex-col rounded-3xl overflow-hidden border border-[#2D2D2D] bg-[#151518]/40 backdrop-blur-sm mb-2">
+    <div
+      className={`flex flex-col rounded-3xl overflow-hidden border-[#2D2D2D] bg-[#151518]/40 backdrop-blur-sm ${
+        isMobile ? "mb-0 border-t" : "mb-2 border"
+      }`}
+    >
       {/* Textarea row */}
       <div className="flex items-center px-4 py-3">
         <textarea
           ref={textareaRef}
           value={inputMessage}
           onChange={(e) => onInputChange(e.target.value)}
+          onFocus={() => {
+            setIsKeyboardOpen(true);
+          }}
+          onBlur={() => {
+            setIsKeyboardOpen(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -215,7 +236,7 @@ export function ChatInput({
                 className="p-2 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 transition-colors"
                 title="Share this chat"
               >
-                <FiShare2 size={18} />
+                <TbShare2 size={18} />
               </button>
             )}
 
@@ -238,7 +259,7 @@ export function ChatInput({
                 className="p-2 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 transition-colors"
                 title="Share this chat"
               >
-                <FiShare2 size={18} />
+                <TbShare2 size={18} />
               </button>
             )}
             <Tooltip.Provider>

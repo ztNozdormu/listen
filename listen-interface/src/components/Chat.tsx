@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useChat } from "../contexts/ChatContext";
 import { useModal } from "../contexts/ModalContext";
+import { useSettingsStore } from "../store/settingsStore";
 import { useSuggestStore } from "../store/suggestStore";
 import {
   ParToolCallSchema,
@@ -60,6 +61,8 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
     fetchSuggestions,
   } = useSuggestStore();
 
+  const { displaySuggestions } = useSettingsStore();
+
   // Memoize the suggestions selector
   const suggestions = useMemo(() => {
     return urlParams.chatId ? getSuggestions(urlParams.chatId) : [];
@@ -90,9 +93,14 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
     },
     {
       question: t(
-        "recommended_questions.how_to_manage_risk_when_trading_memecoins",
+        "recommended_questions.how_to_manage_risk_when_trading_memecoins"
       ),
       enabled: true,
+    },
+    {
+      question: t("recommended_questions.im_feeling_lucky_question"),
+      enabled: true,
+      display: t("recommended_questions.im_feeling_lucky_display"),
     },
     {
       question: t("recommended_questions.buy_the_solana_dip"),
@@ -128,7 +136,7 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
         useSuggestStore.getState().clearSuggestions(urlParams.chatId);
       }
     },
-    [sendMessage, setMessages, urlParams.chatId],
+    [sendMessage, setMessages, urlParams.chatId]
   );
 
   // Focus the input field when creating a new chat
@@ -190,7 +198,7 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
       if (lastMessage.type === "ToolCall") {
         try {
           const toolCall = ToolCallSchema.parse(
-            JSON.parse(lastMessage.message),
+            JSON.parse(lastMessage.message)
           );
           // For a single tool call, represent it within the RigToolCall structure
           const rigToolCall: RigToolCall = {
@@ -214,14 +222,14 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
       } else if (lastMessage.type === "ParToolCall") {
         try {
           const parToolCall = ParToolCallSchema.parse(
-            JSON.parse(lastMessage.message),
+            JSON.parse(lastMessage.message)
           );
           newActiveToolCalls = parToolCall.tool_calls.reduce(
             (acc, toolCall) => {
               acc[toolCall.id] = toolCall;
               return acc;
             },
-            {} as Record<string, RigToolCall>,
+            {} as Record<string, RigToolCall>
           );
         } catch (error) {
           console.error("Failed to parse parallel tool call:", error);
@@ -248,6 +256,7 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
     if (!urlParams.chatId) return;
 
     const shouldFetchSuggestions =
+      displaySuggestions &&
       messages.length > 0 &&
       !isLoading &&
       !isSuggestionsLoading &&
@@ -258,7 +267,7 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
         urlParams.chatId,
         messages,
         getAccessToken,
-        i18n.language,
+        i18n.language
       );
     }
   }, [
@@ -345,7 +354,7 @@ export function Chat({ selectedChatId }: { selectedChatId?: string }) {
             <NestedAgentOutputDisplay content={nestedAgentOutput.content} />
           )}
         </div>
-        {messages.length !== 0 && <div className="flex-grow min-h-[70vh]" />}
+        {messages.length !== 0 && <div className="flex-grow min-h-[75vh]" />}
       </ChatContainer>
     </>
   );

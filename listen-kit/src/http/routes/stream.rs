@@ -1,13 +1,16 @@
-use crate::agent::create_agent;
+use crate::agent::create_listen_agent;
+use crate::agent::Features;
 use crate::common::spawn_with_signer;
 use crate::http::middleware::verify_auth;
 use crate::http::serde::deserialize_messages;
 use crate::http::state::AppState;
+use crate::memory::add_user_specific_memories;
+use crate::memory::make_mem0_messages;
+use crate::reasoning_loop::Model;
 use crate::reasoning_loop::ReasoningLoop;
 use crate::reasoning_loop::StreamResponse;
 use crate::signer::privy::PrivySigner;
 use crate::signer::TransactionSigner;
-use crate::solana::agent::Features;
 use actix_web::{post, web, HttpRequest, Responder};
 use actix_web_lab::sse;
 use futures::StreamExt;
@@ -114,16 +117,17 @@ async fn stream(
 
     let preamble = request.preamble.clone();
     let features = request.features.clone().unwrap_or_default();
-    let with_memory = features.memory.clone();
+    let with_memory = features.memory;
     let locale = request.locale.clone().unwrap_or("en".to_string());
-    let chain = request.chain.clone().unwrap_or("solana".to_string());
-    let model_type = request.model_type.clone().unwrap_or_default();
     let prompt = request.prompt.clone();
     let messages = request.chat_history.clone();
 
     // Select the appropriate agent based on the chain parameter and preamble
-    let model =
-        create_agent(preamble, features, locale.clone(), chain, model_type);
+    let model = Model::OpenRouter(Arc::new(create_listen_agent(
+        preamble,
+        features,
+        locale.clone(),
+    )));
 
     let signer: Arc<dyn TransactionSigner> = Arc::new(PrivySigner::new(
         state.privy.clone(),
@@ -144,6 +148,7 @@ async fn stream(
         let wallet_address = user_session.wallet_address.clone();
         let chat_request = request.clone();
 
+        let _prompt = prompt.clone();
         async move {
             let mut collected_responses = Vec::new();
 
@@ -153,15 +158,37 @@ async fn stream(
 
             // Only save if we have responses
             if !collected_responses.is_empty() {
+                // add to user-centric memory
+                let responses =
+                    super::join::join_responses(collected_responses);
+
+                let _user_id = user_id.clone();
+                let _responses = responses.clone();
+                let handle = tokio::spawn(async move {
+                    match add_user_specific_memories(
+                        _user_id,
+                        make_mem0_messages(_responses, _prompt),
+                    )
+                    .await
+                    {
+                        Ok(_) => tracing::info!(
+                            "Successfully added user-centric memories to Mem0"
+                        ),
+                        Err(e) => tracing::error!(
+                            "Failed to add user-centric memories to Mem0: {}",
+                            e
+                        ),
+                    }
+                });
+
+                // dump to mongo
                 let collection = mongo.collection::<Chat>("chats");
                 let chat = Chat {
                     user_id: user_id.as_str(),
                     wallet_address: wallet_address.as_deref(),
                     pubkey: None,
                     chat_request,
-                    responses: super::join::join_responses(
-                        collected_responses,
-                    ),
+                    responses,
                 };
 
                 match collection.insert_one(chat, None).await {
@@ -175,6 +202,12 @@ async fn stream(
                         )
                     }
                 }
+                match handle.await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::error!("Memory handle failed to join: {}", e)
+                    }
+                }
             }
         }
     };
@@ -182,7 +215,6 @@ async fn stream(
     // Process responses in the background - don't wait for it
     tokio::spawn(response_collector);
 
-    // TODO this move might be moving too much, double-check
     spawn_with_signer(signer, move || async move {
         let reasoning_loop = ReasoningLoop::new(model).with_stdout(false);
 
@@ -227,10 +259,11 @@ async fn stream(
                 messages,
                 Some(internal_tx),
                 if with_memory {
-                    Some(state.memory.clone())
+                    Some(state.global_memory.clone())
                 } else {
                     None
                 },
+                user_session.user_id.clone(),
             )
             .await;
 

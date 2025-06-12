@@ -1,3 +1,6 @@
+import "@fontsource/dm-sans/400.css";
+import "@fontsource/dm-sans/500.css";
+import "@fontsource/dm-sans/700.css";
 import "@fontsource/space-grotesk/300.css";
 import "@fontsource/space-grotesk/400.css";
 import "@fontsource/space-grotesk/500.css";
@@ -12,10 +15,11 @@ import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import { arbitrum } from "viem/chains";
 import { WagmiProvider, createConfig, http } from "wagmi";
+import { KeyboardProvider } from "./contexts/KeyboardContext";
 import { MobileProvider } from "./contexts/MobileContext";
-import { ModalProvider } from "./contexts/ModalContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 import { ToastProvider } from "./contexts/ToastContext";
+
 import i18n from "./i18n";
 import "./index.css";
 
@@ -41,47 +45,53 @@ declare module "@tanstack/react-router" {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <MobileProvider>
-      <I18nextProvider i18n={i18n}>
-        <PrivyProvider
-          appId={"cm6c7ifqd00ar52m1qxfgbkkn"}
-          config={{
-            appearance: {
-              theme: "dark",
-              walletChainType: "ethereum-and-solana",
-              walletList: [
-                "phantom",
-                "okx_wallet",
-                "metamask",
-                "bybit_wallet",
-                "coinbase_wallet",
-                "rainbow",
-                "wallet_connect",
-                "rabby_wallet",
-              ],
-            },
-            externalWallets: {
-              solana: {
-                connectors: toSolanaWalletConnectors({
-                  shouldAutoConnect: true,
-                }),
-              },
-            },
-          }}
-        >
+    <PrivyProvider
+      appId={"cm6c7ifqd00ar52m1qxfgbkkn"}
+      config={{
+        appearance: {
+          theme: "dark",
+          walletChainType: "ethereum-and-solana",
+          walletList: [
+            "phantom",
+            "okx_wallet",
+            "metamask",
+            "bybit_wallet",
+            "coinbase_wallet",
+            "rainbow",
+            "wallet_connect",
+            "rabby_wallet",
+            "solflare",
+          ],
+        },
+        fundingMethodConfig: {
+          moonpay: {
+            paymentMethod: "credit_debit_card",
+          },
+        },
+        externalWallets: {
+          solana: {
+            connectors: toSolanaWalletConnectors({
+              shouldAutoConnect: true,
+            }),
+          },
+        },
+      }}
+    >
+      <MobileProvider>
+        <I18nextProvider i18n={i18n}>
           <ToastProvider>
             <WagmiProvider config={config}>
               <QueryClientProvider client={new QueryClient()}>
                 <SidebarProvider>
-                  <ModalProvider>
+                  <KeyboardProvider>
                     <RouterProvider router={router} />
-                  </ModalProvider>
+                  </KeyboardProvider>
                 </SidebarProvider>
               </QueryClientProvider>
             </WagmiProvider>
           </ToastProvider>
-        </PrivyProvider>
-      </I18nextProvider>
-    </MobileProvider>
-  </StrictMode>
+        </I18nextProvider>
+      </MobileProvider>
+    </PrivyProvider>
+  </StrictMode>,
 );

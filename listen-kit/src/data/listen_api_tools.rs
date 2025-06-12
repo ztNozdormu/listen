@@ -1,12 +1,15 @@
-use crate::common::spawn_with_signer_and_channel;
+use crate::data::candlesticks_and_analysis_to_price_action_analysis_response;
 use crate::distiller::analyst::Analyst;
 use crate::reasoning_loop::ReasoningLoop;
 use crate::signer::SignerContext;
+use crate::{
+    common::spawn_with_signer_and_channel, solana::util::validate_mint,
+};
 use anyhow::{anyhow, Result};
 use rig_tool_macro::tool;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Candlestick {
     pub timestamp: u64,
     pub open: f64,
@@ -31,19 +34,40 @@ pub struct PriceChart {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct PoolInfo {
+    pub dex: String,
+    pub address: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TopToken {
     pub name: String,
     pub pubkey: String,
     pub price: f64,
     pub market_cap: f64,
     pub volume_24h: f64,
+    #[serde(default)]
     pub price_change_24h: f64,
+    pub chain_id: Option<String>,
+    #[serde(default)]
+    pub pools: Vec<PoolInfo>,
 }
 
-const API_BASE: &str = "https://api.listen-rs.com/v1/adapter";
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PriceActionAnalysisResponse {
+    pub analysis: String,
+    pub current_price: f64,
+    pub current_time: String,
+    pub total_volume: f64,
+    pub price_change: f64,
+    pub high: f64,
+    pub low: f64,
+}
+
+pub const LISTEN_API_BASE: &str = "https://api.listen-rs.com/v1/adapter";
 
 #[tool(description = "
-Fetch token metadata from the Listen API. This is the metadata that was
+Fetch token metadata for any Solana token from the Listen API. This is the metadata that was
 initially set during token creation by the token creator that lives on-chain and
 IPFS.
 
@@ -56,8 +80,10 @@ It returns metadata that includes:
 - IPFS metadata (name, description, image, social links)
 ")]
 pub async fn fetch_token_metadata(mint: String) -> Result<serde_json::Value> {
+    validate_mint(&mint)?;
+
     let response =
-        reqwest::get(format!("{}/metadata?mint={}", API_BASE, mint))
+        reqwest::get(format!("{}/metadata?mint={}", LISTEN_API_BASE, mint))
             .await
             .map_err(|e| anyhow!("Failed to fetch token metadata: {}", e))?;
 
@@ -68,7 +94,7 @@ pub async fn fetch_token_metadata(mint: String) -> Result<serde_json::Value> {
 }
 
 #[tool(description = "
-Fetch token price from the Listen API.
+Fetch token price for any Solana token from the Listen API.
 
 Parameters:
 - mint (string): The token's mint/pubkey address
@@ -76,9 +102,12 @@ Parameters:
 Returns the price of the token in USD.
 ")]
 pub async fn fetch_token_price(mint: String) -> Result<f64> {
-    let response = reqwest::get(format!("{}/price?mint={}", API_BASE, mint))
-        .await
-        .map_err(|e| anyhow!("Failed to fetch token price: {}", e))?;
+    validate_mint(&mint)?;
+
+    let response =
+        reqwest::get(format!("{}/price?mint={}", LISTEN_API_BASE, mint))
+            .await
+            .map_err(|e| anyhow!("Failed to fetch token price: {}", e))?;
 
     let data = response
         .json::<serde_json::Value>()
@@ -94,31 +123,32 @@ pub async fn fetch_token_price(mint: String) -> Result<f64> {
 }
 
 #[tool(description = "
-Fetch top tokens from the Listen API.
+Fetch top Solana tokens based on volume from the Listen API.
 
-No point using limit of more than ~6, less is more, as long as the filters are right (unless user asks for more)
-
-Lower timeframes work best, 7200 seconds is the sweet spot, you can request any
-timeframe though, up to 24 hours
+This tool is great for finding the most viral tokens on Solana.
 
 Parameters:
-- limit (string): number of tokens to return
-- min_market_cap (string): minimum market cap filter
-- max_market_cap (string): maximum market cap filter
-- timeframe (string): timeframe in seconds
+- limit (optional, string): number of tokens to return (default: 4)
+- min_market_cap (optional, string): minimum market cap filter (default: 1000000)
+- max_market_cap (optional, string): maximum market cap filter (default: no limit)
+- timeframe (optional, string): timeframe in seconds (default: 7200)
 
-Use the min_market_cap of 100k unless specified otherwise.
-For max market cap, pass \"0\" for any market cap unless specified otherwise
+Keep the default set of params unless the user asks for something different
 
 Returns a list of top tokens with their market data.
 ")]
 pub async fn fetch_top_tokens(
-    limit: String,
-    min_market_cap: String,
-    max_market_cap: String,
-    timeframe: String,
+    limit: Option<String>,
+    min_market_cap: Option<String>,
+    max_market_cap: Option<String>,
+    timeframe: Option<String>,
 ) -> Result<Vec<TopToken>> {
-    let mut url = format!("{}/top-tokens", API_BASE);
+    let limit = limit.unwrap_or("4".to_string());
+    let min_market_cap = min_market_cap.unwrap_or("1000000".to_string());
+    let max_market_cap = max_market_cap.unwrap_or("0".to_string());
+    let timeframe = timeframe.unwrap_or("7200".to_string());
+
+    let mut url = format!("{}/top-tokens", LISTEN_API_BASE);
     let mut query_params = vec![];
 
     query_params.push(format!("limit={}", limit));
@@ -146,7 +176,7 @@ pub async fn fetch_top_tokens(
 }
 
 #[tool(description = "
-Fetch price series for a token from the Listen API.
+Fetch price series for any Solana token from the Listen API.
 
 Parameters:
 - mint (string): The token's mint/pubkey address
@@ -162,17 +192,9 @@ pub async fn fetch_price_chart(
     mint: String,
     interval: String,
 ) -> Result<Vec<PriceTick>> {
-    let response = reqwest::get(format!(
-        "{}/candlesticks?mint={}&interval={}",
-        API_BASE, mint, interval
-    ))
-    .await
-    .map_err(|e| anyhow!("Failed to fetch chart: {}", e))?;
+    validate_mint(&mint)?;
 
-    let candlesticks = response
-        .json::<Vec<Candlestick>>()
-        .await
-        .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
+    let candlesticks = fetch_candlesticks(mint, interval).await?;
 
     let price_ticks = candlesticks
         .iter()
@@ -187,7 +209,7 @@ pub async fn fetch_price_chart(
 }
 
 #[tool(description = "
-Fetch price action analysis based on candlestick data for a token from the Listen API.
+Fetch price action analysis based on candlestick data for any Solana token from the Listen API.
 
 Parameters:
 - mint (string): The token's mint/pubkey address
@@ -197,7 +219,7 @@ Parameters:
   * '1h'  (1 hour)
   * '4h'  (4 hours)
   * '1d'  (1 day)
-- intent (string): The intent of the analysis, passed on to the Chart Analyst agent, possible to pass \"\" for no intent
+- intent (string, optional): The intent of the analysis, passed on to the Chart Analyst agent
 
 start with 1m interval, 200 limit and work up the timeframes if required
 
@@ -206,27 +228,26 @@ Returns an analysis of the chart from the Chart Analyst agent
 pub async fn fetch_price_action_analysis(
     mint: String,
     interval: String,
-    intent: String,
-) -> Result<String> {
+    intent: Option<String>,
+) -> Result<PriceActionAnalysisResponse> {
+    validate_mint(&mint)?;
+
     // Validate interval
     match interval.as_str() {
         "15s" | "30s" | "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" => {}
         _ => return Err(anyhow!("Invalid interval: {}", interval)),
     }
 
-    let url = format!(
-        "{}/candlesticks?mint={}&interval={}",
-        API_BASE, mint, interval
-    );
+    if mint.starts_with("0x") {
+        return Err(anyhow!(
+            "Invalid mint: {}, use fetch_price_action_analysis_evm instead for EVM tokens",
+            mint
+        ));
+    }
 
-    let response = reqwest::get(&url)
-        .await
-        .map_err(|e| anyhow!("Failed to fetch candlesticks: {}", e))?;
+    let candlesticks = fetch_candlesticks(mint, interval.clone()).await?;
 
-    let candlesticks = response
-        .json::<Vec<Candlestick>>()
-        .await
-        .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
+    let candlesticks_clone = candlesticks.clone();
 
     let ctx = SignerContext::current().await;
     let locale = ctx.locale();
@@ -235,14 +256,39 @@ pub async fn fetch_price_action_analysis(
 
     let channel = ReasoningLoop::get_current_stream_channel().await;
 
-    spawn_with_signer_and_channel(ctx, channel, move || async move {
-        analyst
-            .analyze_chart(&candlesticks, &interval, Some(intent))
-            .await
-            .map_err(|e| anyhow!("Failed to analyze chart: {}", e))
-    })
-    .await
-    .await?
+    let analysis =
+        spawn_with_signer_and_channel(ctx, channel, move || async move {
+            analyst
+                .analyze_chart(&candlesticks, &interval, intent)
+                .await
+                .map_err(|e| anyhow!("Failed to analyze chart: {}", e))
+        })
+        .await
+        .await??;
+
+    candlesticks_and_analysis_to_price_action_analysis_response(
+        candlesticks_clone,
+        analysis,
+    )
+}
+
+pub async fn fetch_candlesticks(
+    mint: String,
+    interval: String,
+) -> Result<Vec<Candlestick>> {
+    let url = format!(
+        "{}/candlesticks?mint={}&interval={}",
+        LISTEN_API_BASE, mint, interval
+    );
+
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|e| anyhow!("Failed to fetch candlesticks: {}", e))?;
+
+    response
+        .json::<Vec<Candlestick>>()
+        .await
+        .map_err(|e| anyhow!("Failed to parse response: {}", e))
 }
 
 #[cfg(test)]
@@ -252,10 +298,10 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_top_tokens() {
         fetch_top_tokens(
-            "10".to_string(),
-            "1000000000000000000".to_string(),
-            "1000000000000000000".to_string(),
-            "1d".to_string(),
+            Some("10".to_string()),
+            Some("1000000000000000000".to_string()),
+            Some("1000000000000000000".to_string()),
+            Some("36400".to_string()),
         )
         .await
         .unwrap();
@@ -267,7 +313,7 @@ mod tests {
         let analysis = fetch_price_action_analysis(
             "61V8vBaqAGMpgDQi4JcAwo1dmBGHsyhzodcPqnEVpump".to_string(),
             "5m".to_string(),
-            "".to_string(),
+            None,
         )
         .await;
         tracing::info!("{:?}", analysis);

@@ -13,7 +13,7 @@ and returns the summary of the search results given the intent
 Parameters:
 - query (string): The search query string (e.g. \"AI\" OR \"Twitter\" from:elonmusk)
 - query_type (string): The type of search (Latest or Top)
-- intent (string): The intent of the analysis, passed on to the Twitter Analyst agent, possible to pass \"\" for no specific intent
+- intent (string, optional): The intent of the analysis, passed on to the Twitter Analyst agent
 
 Core Query Structure:
 Terms combine with implicit AND: term1 term2
@@ -33,7 +33,7 @@ Multiple operators can be combined to narrow results: from:nasa filter:images si
 pub async fn search_tweets(
     query: String,
     query_type: String,
-    intent: String,
+    intent: Option<String>,
 ) -> Result<String> {
     let locale = SignerContext::current().await.locale();
     let twitter = TwitterApi::from_env()
@@ -54,7 +54,7 @@ pub async fn search_tweets(
                 .analyze_twitter(
                     &query,
                     &serde_json::to_value(&response)?,
-                    Some(intent),
+                    intent,
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to distill: {}", e))
@@ -80,10 +80,12 @@ pub async fn fetch_x_post(id: String) -> Result<serde_json::Value> {
         .fetch_tweets_by_ids(vec![id])
         .await
         .map_err(|e| anyhow!("Failed to fetch X post: {}", e))?;
-    let tweet = response.tweets.first().ok_or(anyhow!("No tweet found"))?;
-    let tweet_json = serde_json::to_value(tweet)
-        .map_err(|e| anyhow!("Failed to parse tweet: {}", e))?;
-    Ok(tweet_json)
+    let tweet = response
+        .get("tweets")
+        .and_then(|tweets| tweets.as_array().and_then(|arr| arr.first()))
+        .ok_or(anyhow!("No tweet found"))?;
+
+    Ok(tweet.clone())
 }
 
 #[tool(description = "
@@ -97,11 +99,11 @@ re-research those proflies calling this same tool
 
 Parameters:
 - username (string): The X username, e.g. @elonmusk
-- intent (string): The intent of the analysis, passed on to the Twitter Analyst agent, possible to pass \"\" for no specific intent
+- intent (string, optional): The intent of the analysis, passed on to the Twitter Analyst agent
 ")]
 pub async fn research_x_profile(
     username: String,
-    intent: String,
+    intent: Option<String>,
 ) -> Result<String> {
     let twitter = TwitterApi::from_env()
         .map_err(|_| anyhow!("Failed to create TwitterApi"))?;
@@ -120,7 +122,7 @@ pub async fn research_x_profile(
                 .analyze_twitter(
                     &username,
                     &serde_json::to_value(&profile)?,
-                    Some(intent),
+                    intent,
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to distill: {}", e))

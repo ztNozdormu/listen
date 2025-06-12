@@ -1,13 +1,13 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { BsLink } from "react-icons/bs";
+import { BiCoin } from "react-icons/bi";
 import { IoSettingsOutline, IoWalletOutline } from "react-icons/io5";
-import { RxDashboard } from "react-icons/rx";
+import { MdHistory } from "react-icons/md";
 import { useMobile } from "../contexts/MobileContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { usePortfolioStore } from "../store/portfolioStore";
-import { BurgerIcon } from "./Burger";
+import { BurgerIconListenThreeDots } from "./Burger";
 
 interface SimpleHeaderProps {
   activePanel: string | null;
@@ -60,9 +60,12 @@ export function SimpleHeader({
         <div
           className={`flex justify-between items-center w-full ${isVerySmallScreen ? "p-[12px]" : "p-[16px]"} ${isVerySmallScreen ? "mt-1" : "mt-2"}`}
         >
-          <BurgerIcon isOpen={isSidebarOpen} onClick={toggleMobileSidebar} />
+          <BurgerIconListenThreeDots
+            isOpen={isSidebarOpen}
+            onClick={toggleMobileSidebar}
+          />
           <div
-            className={`text-white ${isVerySmallScreen ? "text-base" : "text-lg"} flex items-center ${isVerySmallScreen ? "gap-2" : "gap-3"}`}
+            className={`text-white ${isVerySmallScreen ? "text-base" : "text-[20px]"} flex items-center ${isVerySmallScreen ? "gap-2" : "gap-3"} font-dm-sans font-[400] leading-4 text-center align-middle`}
             onClick={user ? () => setActivePanel("portfolio") : () => {}}
           >
             <WalletIcon />${portfolioValue.toFixed(2)}
@@ -103,14 +106,14 @@ export function SimpleHeader({
                 className={panelButtonStyle(activePanel === "screener")}
                 title={t("layout.screener")}
               >
-                <RxDashboard className="w-5 h-5" />
+                <BiCoin className="w-5 h-5" />
               </button>
               <button
                 onClick={() => togglePanel("pipelines")}
                 className={panelButtonStyle(activePanel === "pipelines")}
                 title={t("layout.pipelines")}
               >
-                <BsLink className="w-5 h-5" />
+                <MdHistory className="w-5 h-5" />
               </button>
               <button
                 onClick={() => togglePanel("settings")}
